@@ -38,10 +38,44 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isRunning = false;
   String dailyReflection = '';
 
+Map<String, int> scoreHistory = {}; // date: score
+int currentStreak = 0;
+int personalBest = 0;
+String lastOpenDate = '';
+
   @override
 void initState() {
   super.initState();
+  checkForNewDay();
   loadData();
+}
+
+void checkForNewDay() {
+  String today = DateTime.now().toIso8601String().substring(0, 10);
+
+  if (lastOpenDate != today && lastOpenDate != '') {
+    // Save yesterday's score
+    scoreHistory[lastOpenDate] = productivityScore;
+
+    // Update personal best
+    if (productivityScore > personalBest) {
+      personalBest = productivityScore;
+    }
+
+    // Update streak
+    if (productivityScore >= 70) {
+      currentStreak += 1;
+    } else {
+      currentStreak = 0;
+    }
+
+    // Reset session (if needed)
+    sessionMinutes = 0;
+    tasks = [];
+  }
+
+  lastOpenDate = today;
+  saveData();
 }
 
 void loadData() async {
@@ -52,6 +86,10 @@ void loadData() async {
     final taskList = json.decode(taskData) as List;
     tasks = taskList.map((t) => Task(t['title'], isDone: t['done'])).toList();
   }
+  scoreHistory = Map<String, int>.from(json.decode(prefs.getString('scoreHistory') ?? '{}'));
+  currentStreak = prefs.getInt('streak') ?? 0;
+  personalBest = prefs.getInt('personalBest') ?? 0;
+  lastOpenDate = prefs.getString('lastOpenDate') ?? '';
 
   sessionMinutes = prefs.getInt('sessionMinutes') ?? 0;
   focusMinutes = prefs.getInt('focusMinutes') ?? 0;
@@ -71,6 +109,11 @@ void saveData() async {
   prefs.setInt('sessionMinutes', sessionMinutes);
   prefs.setInt('focusMinutes', focusMinutes);
   prefs.setString('reflection', dailyReflection);
+  prefs.setString('scoreHistory', json.encode(scoreHistory));
+  prefs.setInt('streak', currentStreak);
+  prefs.setInt('personalBest', personalBest);
+  prefs.setString('lastOpenDate', lastOpenDate);
+
 }
 
 
@@ -142,6 +185,22 @@ void saveData() async {
                 ElevatedButton(onPressed: resetTimer, child: Text("Reset")),
               ],
             ),
+            Divider(height: 30),
+            Text("Score History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+            for (var date in scoreHistory.keys.toList().reversed.take(7))
+             Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: Text(
+                "$date: ${scoreHistory[date]}/100",
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+
+            SizedBox(height: 10),
+            Text("🔥 Streak: $currentStreak days"),
+            Text("🏅 Personal Best: $personalBest/100"),
+
             Divider(height: 30),
             Text("Tasks", style: TextStyle(fontSize: 18)),
             for (int i = 0; i < tasks.length; i++)
