@@ -1,3 +1,5 @@
+import 'package:percent_indicator/percent_indicator.dart';
+import 'score_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -12,7 +14,9 @@ class FocusDayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Focus Day',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      themeMode: ThemeMode.system,
       home: HomeScreen(),
     );
   }
@@ -33,119 +37,125 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Task> tasks = [];
   String newTask = "";
   int focusMinutes = 0;
-  int sessionMinutes = 0;
+  Duration remainingTime = Duration(minutes: 25);
+  Duration totalTime = Duration(minutes: 25);
   Timer? timer;
-  bool isRunning = false;
   String dailyReflection = '';
+  Map<String, int> scoreHistory = {};
+  int currentStreak = 0;
+  int personalBest = 0;
+  String lastOpenDate = '';
+  int sessionMinutes = 0;
 
-Map<String, int> scoreHistory = {}; // date: score
-int currentStreak = 0;
-int personalBest = 0;
-String lastOpenDate = '';
+  String formatTime(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(d.inMinutes.remainder(60));
+    final seconds = twoDigits(d.inSeconds.remainder(60));
+    return "$minutes:$seconds";
+  }
 
   @override
-void initState() {
-  super.initState();
-  checkForNewDay();
-  loadData();
-}
-
-void checkForNewDay() {
-  String today = DateTime.now().toIso8601String().substring(0, 10);
-
-  if (lastOpenDate != today && lastOpenDate != '') {
-    // Save yesterday's score
-    scoreHistory[lastOpenDate] = productivityScore;
-
-    // Update personal best
-    if (productivityScore > personalBest) {
-      personalBest = productivityScore;
-    }
-
-    // Update streak
-    if (productivityScore >= 70) {
-      currentStreak += 1;
-    } else {
-      currentStreak = 0;
-    }
-
-    // Reset session (if needed)
-    sessionMinutes = 0;
-    tasks = [];
+  void initState() {
+    super.initState();
+    checkForNewDay();
+    loadData();
   }
 
-  lastOpenDate = today;
-  saveData();
-}
+  void checkForNewDay() {
+    String today = DateTime.now().toIso8601String().substring(0, 10);
 
-void loadData() async {
-  final prefs = await SharedPreferences.getInstance();
+    if (lastOpenDate != today && lastOpenDate != '') {
+      scoreHistory[lastOpenDate] = productivityScore;
 
-  final taskData = prefs.getString('tasks');
-  if (taskData != null) {
-    final taskList = json.decode(taskData) as List;
-    tasks = taskList.map((t) => Task(t['title'], isDone: t['done'])).toList();
+      if (productivityScore > personalBest) {
+        personalBest = productivityScore;
+      }
+
+      if (productivityScore >= 70) {
+        currentStreak += 1;
+      } else {
+        currentStreak = 0;
+      }
+
+      sessionMinutes = 0;
+      tasks = [];
+    }
+
+    lastOpenDate = today;
+    saveData();
   }
-  scoreHistory = Map<String, int>.from(json.decode(prefs.getString('scoreHistory') ?? '{}'));
-  currentStreak = prefs.getInt('streak') ?? 0;
-  personalBest = prefs.getInt('personalBest') ?? 0;
-  lastOpenDate = prefs.getString('lastOpenDate') ?? '';
 
-  sessionMinutes = prefs.getInt('sessionMinutes') ?? 0;
-  focusMinutes = prefs.getInt('focusMinutes') ?? 0;
-  dailyReflection = prefs.getString('reflection') ?? '';
+  void loadData() async {
+    final prefs = await SharedPreferences.getInstance();
 
-  setState(() {});
-}
+    final taskData = prefs.getString('tasks');
+    if (taskData != null) {
+      final taskList = json.decode(taskData) as List;
+      tasks = taskList.map((t) => Task(t['title'], isDone: t['done'])).toList();
+    }
+    scoreHistory = Map<String, int>.from(json.decode(prefs.getString('scoreHistory') ?? '{}'));
+    currentStreak = prefs.getInt('streak') ?? 0;
+    personalBest = prefs.getInt('personalBest') ?? 0;
+    lastOpenDate = prefs.getString('lastOpenDate') ?? '';
 
-void saveData() async {
-  final prefs = await SharedPreferences.getInstance();
+    sessionMinutes = prefs.getInt('sessionMinutes') ?? 0;
+    focusMinutes = prefs.getInt('focusMinutes') ?? 0;
+    dailyReflection = prefs.getString('reflection') ?? '';
 
-  final taskList = tasks
-      .map((t) => {'title': t.title, 'done': t.isDone})
-      .toList();
+    setState(() {});
+  }
 
-  prefs.setString('tasks', json.encode(taskList));
-  prefs.setInt('sessionMinutes', sessionMinutes);
-  prefs.setInt('focusMinutes', focusMinutes);
-  prefs.setString('reflection', dailyReflection);
-  prefs.setString('scoreHistory', json.encode(scoreHistory));
-  prefs.setInt('streak', currentStreak);
-  prefs.setInt('personalBest', personalBest);
-  prefs.setString('lastOpenDate', lastOpenDate);
+  void saveData() async {
+    final prefs = await SharedPreferences.getInstance();
 
-}
+    final taskList = tasks.map((t) => {'title': t.title, 'done': t.isDone}).toList();
 
+    prefs.setString('tasks', json.encode(taskList));
+    prefs.setInt('sessionMinutes', sessionMinutes);
+    prefs.setInt('focusMinutes', focusMinutes);
+    prefs.setString('reflection', dailyReflection);
+    prefs.setString('scoreHistory', json.encode(scoreHistory));
+    prefs.setInt('streak', currentStreak);
+    prefs.setInt('personalBest', personalBest);
+    prefs.setString('lastOpenDate', lastOpenDate);
+  }
 
   int get productivityScore {
     double taskScore = tasks.isEmpty
         ? 0
         : tasks.where((task) => task.isDone).length / tasks.length;
-    double focusScore = sessionMinutes / 90.0; // assume goal is 90 mins
+    double focusScore = sessionMinutes / 90.0;
     double total = (taskScore * 0.5 + focusScore * 0.5) * 100;
     return total.clamp(0, 100).toInt();
   }
 
   void startTimer() {
-    if (isRunning) return;
-    isRunning = true;
-    timer = Timer.periodic(Duration(minutes: 1), (Timer t) {
-      setState(() {
-        sessionMinutes += 1;
-      });
+    timer?.cancel();
+    timer = Timer.periodic(Duration(seconds: 1), (Timer t) {
+      if (remainingTime.inSeconds <= 0) {
+        t.cancel();
+        setState(() {
+          focusMinutes += 25;
+          sessionMinutes += 25;
+        });
+        saveData();
+      } else {
+        setState(() {
+          remainingTime -= Duration(seconds: 1);
+        });
+      }
     });
   }
 
   void pauseTimer() {
     timer?.cancel();
-    isRunning = false;
   }
 
   void resetTimer() {
     timer?.cancel();
-    focusMinutes += sessionMinutes;
-    sessionMinutes = 0;
-    isRunning = false;
+    setState(() {
+      remainingTime = Duration(minutes: 25);
+    });
     saveData();
   }
 
@@ -175,7 +185,24 @@ void saveData() async {
             Text("Today's Score: $productivityScore/100",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             SizedBox(height: 20),
-            Text("Focus Timer: $sessionMinutes min"),
+            Center(
+              child: CircularPercentIndicator(
+                radius: 120.0,
+                lineWidth: 12.0,
+                percent: remainingTime.inSeconds / totalTime.inSeconds,
+                center: Text(
+                  formatTime(remainingTime),
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Courier',
+                  ),
+                ),
+                progressColor: Colors.blue,
+                backgroundColor: Colors.grey.shade300,
+                circularStrokeCap: CircularStrokeCap.round,
+              ),
+            ),
             Row(
               children: [
                 ElevatedButton(onPressed: startTimer, child: Text("Start")),
@@ -187,20 +214,18 @@ void saveData() async {
             ),
             Divider(height: 30),
             Text("Score History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
+            ScoreChart(scoreHistory: scoreHistory),
             for (var date in scoreHistory.keys.toList().reversed.take(7))
-             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2.0),
-              child: Text(
-                "$date: ${scoreHistory[date]}/100",
-                style: TextStyle(fontSize: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2.0),
+                child: Text(
+                  "$date: ${scoreHistory[date]}/100",
+                  style: TextStyle(fontSize: 16),
+                ),
               ),
-            ),
-
             SizedBox(height: 10),
             Text("🔥 Streak: $currentStreak days"),
             Text("🏅 Personal Best: $personalBest/100"),
-
             Divider(height: 30),
             Text("Tasks", style: TextStyle(fontSize: 18)),
             for (int i = 0; i < tasks.length; i++)
@@ -274,7 +299,6 @@ class _ReflectionScreenState extends State<ReflectionScreen> {
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                // In future: save to local or Firebase
                 Navigator.pop(context);
               },
               child: Text("Save Reflection"),
