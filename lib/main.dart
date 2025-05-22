@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'dart:async';
 
@@ -34,6 +36,43 @@ class _HomeScreenState extends State<HomeScreen> {
   int sessionMinutes = 0;
   Timer? timer;
   bool isRunning = false;
+  String dailyReflection = '';
+
+  @override
+void initState() {
+  super.initState();
+  loadData();
+}
+
+void loadData() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final taskData = prefs.getString('tasks');
+  if (taskData != null) {
+    final taskList = json.decode(taskData) as List;
+    tasks = taskList.map((t) => Task(t['title'], isDone: t['done'])).toList();
+  }
+
+  sessionMinutes = prefs.getInt('sessionMinutes') ?? 0;
+  focusMinutes = prefs.getInt('focusMinutes') ?? 0;
+  dailyReflection = prefs.getString('reflection') ?? '';
+
+  setState(() {});
+}
+
+void saveData() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  final taskList = tasks
+      .map((t) => {'title': t.title, 'done': t.isDone})
+      .toList();
+
+  prefs.setString('tasks', json.encode(taskList));
+  prefs.setInt('sessionMinutes', sessionMinutes);
+  prefs.setInt('focusMinutes', focusMinutes);
+  prefs.setString('reflection', dailyReflection);
+}
+
 
   int get productivityScore {
     double taskScore = tasks.isEmpty
@@ -64,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
     focusMinutes += sessionMinutes;
     sessionMinutes = 0;
     isRunning = false;
+    saveData();
   }
 
   void addTask() {
@@ -72,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
         tasks.add(Task(newTask.trim()));
         newTask = "";
       });
+      saveData();
     }
   }
 
@@ -112,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       tasks[i].isDone = val!;
                     });
+                    saveData();
                   },
                 ),
                 trailing: IconButton(
