@@ -1,3 +1,6 @@
+import 'calendar_screen.dart';
+import 'profile_screen.dart';
+import 'models/task.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'score_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,18 +17,10 @@ class FocusDayApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Focus Day',
-      theme: ThemeData.light(),
-      darkTheme: ThemeData.dark(),
-      themeMode: ThemeMode.system,
+      theme: ThemeData.dark(),
       home: HomeScreen(),
     );
   }
-}
-
-class Task {
-  String title;
-  bool isDone;
-  Task(this.title, {this.isDone = false});
 }
 
 class HomeScreen extends StatefulWidget {
@@ -91,7 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final taskData = prefs.getString('tasks');
     if (taskData != null) {
       final taskList = json.decode(taskData) as List;
-      tasks = taskList.map((t) => Task(t['title'], isDone: t['done'])).toList();
+      tasks = taskList.map((t) => Task(
+        t['title'],
+        isDone: t['done'],
+        dueDate: DateTime.parse(t['dueDate']),
+      )).toList();
     }
     scoreHistory = Map<String, int>.from(json.decode(prefs.getString('scoreHistory') ?? '{}'));
     currentStreak = prefs.getInt('streak') ?? 0;
@@ -108,7 +107,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void saveData() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final taskList = tasks.map((t) => {'title': t.title, 'done': t.isDone}).toList();
+    final taskList = tasks.map((t) => {
+      'title': t.title,
+      'done': t.isDone,
+      'dueDate': t.dueDate.toIso8601String(),
+    }).toList();
 
     prefs.setString('tasks', json.encode(taskList));
     prefs.setInt('sessionMinutes', sessionMinutes);
@@ -159,32 +162,28 @@ class _HomeScreenState extends State<HomeScreen> {
     saveData();
   }
 
-  void addTask() {
-    if (newTask.trim().isNotEmpty) {
-      setState(() {
-        tasks.add(Task(newTask.trim()));
-        newTask = "";
-      });
-      saveData();
-    }
-  }
-
-  void openReflection() {
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => ReflectionScreen()));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Focus Day")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Text("Focus Day", style: TextStyle(color: Colors.white)),
+        actions: [
+          IconButton(
+            icon: Image.asset('assets/icon.png'),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(
+                builder: (_) => ProfileScreen(personalBest: personalBest),
+              ));
+            },
+          )
+        ],
+      ),
+      body: Container(
+        color: Colors.black,
+        padding: EdgeInsets.all(16),
         child: ListView(
           children: [
-            Text("Today's Score: $productivityScore/100",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            SizedBox(height: 20),
             Center(
               child: CircularPercentIndicator(
                 radius: 120.0,
@@ -192,116 +191,75 @@ class _HomeScreenState extends State<HomeScreen> {
                 percent: remainingTime.inSeconds / totalTime.inSeconds,
                 center: Text(
                   formatTime(remainingTime),
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Courier',
-                  ),
+                  style: TextStyle(fontSize: 36, color: Colors.white),
                 ),
-                progressColor: Colors.blue,
-                backgroundColor: Colors.grey.shade300,
+                progressColor: Colors.orangeAccent,
+                backgroundColor: Colors.grey.shade800,
                 circularStrokeCap: CircularStrokeCap.round,
               ),
             ),
+            SizedBox(height: 20),
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton(onPressed: startTimer, child: Text("Start")),
-                SizedBox(width: 10),
-                ElevatedButton(onPressed: pauseTimer, child: Text("Pause")),
-                SizedBox(width: 10),
-                ElevatedButton(onPressed: resetTimer, child: Text("Reset")),
-              ],
-            ),
-            Divider(height: 30),
-            Text("Score History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ScoreChart(scoreHistory: scoreHistory),
-            for (var date in scoreHistory.keys.toList().reversed.take(7))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                child: Text(
-                  "$date: ${scoreHistory[date]}/100",
-                  style: TextStyle(fontSize: 16),
-                ),
-              ),
-            SizedBox(height: 10),
-            Text("🔥 Streak: $currentStreak days"),
-            Text("🏅 Personal Best: $personalBest/100"),
-            Divider(height: 30),
-            Text("Tasks", style: TextStyle(fontSize: 18)),
-            for (int i = 0; i < tasks.length; i++)
-              ListTile(
-                title: Text(tasks[i].title),
-                leading: Checkbox(
-                  value: tasks[i].isDone,
-                  onChanged: (val) {
-                    setState(() {
-                      tasks[i].isDone = val!;
-                    });
-                    saveData();
-                  },
-                ),
-                trailing: IconButton(
-                  icon: Icon(Icons.delete),
-                  onPressed: () {
-                    setState(() {
-                      tasks.removeAt(i);
-                    });
-                  },
-                ),
-              ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(hintText: "New task"),
-                    onChanged: (val) => newTask = val,
+                ElevatedButton(
+                  onPressed: startTimer,
+                  child: Text("Start"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
                   ),
                 ),
-                ElevatedButton(onPressed: addTask, child: Text("Add"))
+                SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: pauseTimer,
+                  child: Text("Pause"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: resetTimer,
+                  child: Text("Reset"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ],
             ),
             SizedBox(height: 20),
-            ElevatedButton(
-                onPressed: openReflection, child: Text("Daily Reflection"))
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ReflectionScreen extends StatefulWidget {
-  @override
-  _ReflectionScreenState createState() => _ReflectionScreenState();
-}
-
-class _ReflectionScreenState extends State<ReflectionScreen> {
-  String entry = "";
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Reflection")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text("Write your reflection:"),
-            SizedBox(height: 10),
-            TextField(
-              maxLines: 8,
-              onChanged: (val) => entry = val,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: "How was your day?",
+            Text("Daily Overview", style: TextStyle(fontSize: 18, color: Colors.white)),
+            Card(
+              color: Colors.grey.shade900,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("🔥 Current Streak: $currentStreak days", style: TextStyle(color: Colors.white)),
+                    SizedBox(height: 8),
+                    Text("📅 What's On Today:", style: TextStyle(color: Colors.white)),
+                    ...tasks
+                      .where((task) => task.dueDate.day == DateTime.now().day &&
+                                       task.dueDate.month == DateTime.now().month &&
+                                       task.dueDate.year == DateTime.now().year)
+                      .map((task) => Text("- ${task.title}", style: TextStyle(color: Colors.white)))
+                  ],
+                ),
               ),
             ),
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => CalendarScreen(tasks: tasks),
+                ));
               },
-              child: Text("Save Reflection"),
+              child: Text("📅 Open Calendar"),
             )
           ],
         ),
