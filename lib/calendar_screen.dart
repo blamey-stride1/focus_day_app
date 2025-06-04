@@ -15,8 +15,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
+  List<Task> _getTasksForDay(DateTime day) {
+    return widget.tasks.where((task) {
+      final bool isSameDayTask =
+          isSameDay(task.dueDate, day);
+
+      final bool isRecurringToday =
+          task.isRecurring &&
+          task.dueDate.weekday == day.weekday;
+
+      return isSameDayTask || isRecurringToday;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tasksForDay = _selectedDay == null
+        ? []
+        : _getTasksForDay(_selectedDay!);
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -71,21 +88,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
           ),
           Expanded(
-            child: ListView(
-              children: widget.tasks
-                  .where((task) => isSameDay(task.dueDate, _selectedDay))
-                  .map((task) => ListTile(
+            child: tasksForDay.isEmpty
+                ? Center(
+                    child: Text(
+                      "No tasks for this day.",
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  )
+                : ListView(
+                    children: tasksForDay.map((task) {
+                      return ListTile(
                         title: Text(task.title, style: TextStyle(color: Colors.white)),
+                        subtitle: task.isRecurring
+                            ? Text("Recurring", style: TextStyle(color: Colors.orangeAccent))
+                            : null,
                         leading: Checkbox(
                           value: task.isDone,
                           onChanged: (_) {},
                           activeColor: Colors.orangeAccent,
                           checkColor: Colors.black,
                         ),
-                      ))
-                  .toList(),
-            ),
-          )
+                      );
+                    }).toList(),
+                  ),
+          ),
         ],
       ),
     );

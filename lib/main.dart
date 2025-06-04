@@ -30,6 +30,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Task> tasks = [];
+  List<Task> defaultTasks = [
+    Task("Exercise"),
+    Task("Meditate"),
+    Task("Journal"),
+  ];
   String newTask = "";
   int focusMinutes = 0;
   Duration remainingTime = Duration(minutes: 25);
@@ -41,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int personalBest = 0;
   String lastOpenDate = '';
   int sessionMinutes = 0;
+  int selectedDurationMinutes = 25;
 
   String formatTime(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -73,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       sessionMinutes = 0;
-      tasks = [];
+      tasks = List.from(defaultTasks);
     }
 
     lastOpenDate = today;
@@ -92,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
         dueDate: DateTime.parse(t['dueDate']),
       )).toList();
     }
+
     scoreHistory = Map<String, int>.from(json.decode(prefs.getString('scoreHistory') ?? '{}'));
     currentStreak = prefs.getInt('streak') ?? 0;
     personalBest = prefs.getInt('personalBest') ?? 0;
@@ -100,8 +107,12 @@ class _HomeScreenState extends State<HomeScreen> {
     sessionMinutes = prefs.getInt('sessionMinutes') ?? 0;
     focusMinutes = prefs.getInt('focusMinutes') ?? 0;
     dailyReflection = prefs.getString('reflection') ?? '';
+    selectedDurationMinutes = prefs.getInt('sessionLength') ?? 25;
 
-    setState(() {});
+    setState(() {
+      remainingTime = Duration(minutes: selectedDurationMinutes);
+      totalTime = Duration(minutes: selectedDurationMinutes);
+    });
   }
 
   void saveData() async {
@@ -121,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
     prefs.setInt('streak', currentStreak);
     prefs.setInt('personalBest', personalBest);
     prefs.setString('lastOpenDate', lastOpenDate);
+    prefs.setInt('sessionLength', selectedDurationMinutes);
   }
 
   int get productivityScore {
@@ -134,12 +146,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void startTimer() {
     timer?.cancel();
+    remainingTime = Duration(minutes: selectedDurationMinutes);
+    totalTime = Duration(minutes: selectedDurationMinutes);
     timer = Timer.periodic(Duration(seconds: 1), (Timer t) {
       if (remainingTime.inSeconds <= 0) {
         t.cancel();
         setState(() {
-          focusMinutes += 25;
-          sessionMinutes += 25;
+          focusMinutes += selectedDurationMinutes;
+          sessionMinutes += selectedDurationMinutes;
         });
         saveData();
       } else {
@@ -157,7 +171,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void resetTimer() {
     timer?.cancel();
     setState(() {
-      remainingTime = Duration(minutes: 25);
+      remainingTime = Duration(minutes: selectedDurationMinutes);
+    });
+    saveData();
+  }
+
+  void addTask(String title) {
+    setState(() {
+      tasks.add(Task(title, dueDate: DateTime.now()));
+      newTask = "";
     });
     saveData();
   }
@@ -198,7 +220,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 circularStrokeCap: CircularStrokeCap.round,
               ),
             ),
-            SizedBox(height: 20),
+            Column(
+              children: [
+                Text("Session Length: $selectedDurationMinutes minutes", style: TextStyle(color: Colors.white)),
+                Slider(
+                  value: selectedDurationMinutes.toDouble(),
+                  min: 5,
+                  max: 120,
+                  divisions: 23,
+                  label: "$selectedDurationMinutes min",
+                  onChanged: (value) {
+                    setState(() {
+                      selectedDurationMinutes = value.toInt();
+                      remainingTime = Duration(minutes: selectedDurationMinutes);
+                      totalTime = Duration(minutes: selectedDurationMinutes);
+                    });
+                  },
+                ),
+              ],
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -244,12 +284,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     SizedBox(height: 8),
                     Text("📅 What's On Today:", style: TextStyle(color: Colors.white)),
                     ...tasks
-                      .where((task) => task.dueDate.day == DateTime.now().day &&
-                                       task.dueDate.month == DateTime.now().month &&
-                                       task.dueDate.year == DateTime.now().year)
-                      .map((task) => Text("- ${task.title}", style: TextStyle(color: Colors.white)))
+                        .where((task) => task.dueDate.day == DateTime.now().day &&
+                                     task.dueDate.month == DateTime.now().month &&
+                                     task.dueDate.year == DateTime.now().year)
+                        .map((task) => Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text("- ${task.title}", style: TextStyle(color: Colors.white)),
+                                ),
+                                Checkbox(
+                                  value: task.isDone,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      task.isDone = val ?? false;
+                                    });
+                                    saveData();
+                                  },
+                                ),
+                              ],
+                            ))
                   ],
                 ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      onChanged: (val) => newTask = val,
+                      decoration: InputDecoration(
+                        hintText: 'Add new task',
+                        hintStyle: TextStyle(color: Colors.white54),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.white24),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.orangeAccent),
+                        ),
+                      ),
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: () => addTask(newTask),
+                    child: Text("Add"),
+                  )
+                ],
               ),
             ),
             SizedBox(height: 20),
